@@ -1,14 +1,13 @@
 const express = require('express');
 const cors = require('cors');
+const axios = require('axios');
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Store user's location (default: Nairobi CBD)
-let userLocation = { lat: -1.286389, lng: 36.817223 };
+let userLocation = { lat: -1.286389, lng: 36.817223 }; // fallback Nairobi CBD
 
-// Initial horse data (coordinates will be adjusted dynamically)
 let horses = [
   {
     horseId: "horse002",
@@ -18,7 +17,7 @@ let horses = [
     oxygenSaturation: 97,
     speed: 2,
     coordinates: { lat: userLocation.lat + 0.001, lng: userLocation.lng + 0.001 },
-    location: "jk",
+    location: "Unknown",
     lastUpdated: new Date().toISOString(),
     status: "normal",
     behavioralInsights: "Active and calm",
@@ -32,7 +31,7 @@ let horses = [
     oxygenSaturation: 96,
     speed: 0,
     coordinates: { lat: userLocation.lat - 0.001, lng: userLocation.lng - 0.001 },
-    location: "Kitengela",
+    location: "Unknown",
     lastUpdated: new Date().toISOString(),
     status: "normal",
     behavioralInsights: "Calm",
@@ -40,52 +39,64 @@ let horses = [
   }
 ];
 
-// Endpoint to update user location
+// Reverse geocoding function
+const getLocationName = async (lat, lng) => {
+  try {
+    const res = await axios.get('https://nominatim.openstreetmap.org/reverse', {
+      params: {
+        lat,
+        lon: lng,
+        format: 'json'
+      },
+      headers: {
+        'User-Agent': 'Equikai-App'
+      }
+    });
+    return res.data.address?.suburb || res.data.address?.town || res.data.address?.city || res.data.display_name || "Unknown";
+  } catch (err) {
+    console.error("Reverse geocode error:", err.message);
+    return "Unknown";
+  }
+};
+
+// Update horses every 3s
+setInterval(async () => {
+  for (let horse of horses) {
+    horse.heartRate = 60 + Math.floor(Math.random() * 25);
+    horse.temperature = Number((37 + Math.random() * 2).toFixed(1));
+    horse.speed = Number((Math.random() * 6).toFixed(1));
+
+    // Move around user location
+    const offset = 0.001;
+    horse.coordinates.lat = userLocation.lat + (Math.random() - 0.5) * offset;
+    horse.coordinates.lng = userLocation.lng + (Math.random() - 0.5) * offset;
+
+    horse.lastUpdated = new Date().toISOString();
+    horse.status = horse.heartRate > 80 ? "elevated" : "normal";
+
+    // Update human-readable location
+    horse.location = await getLocationName(horse.coordinates.lat, horse.coordinates.lng);
+  }
+}, 5000);
+
+// Update user location
 app.post('/api/location', (req, res) => {
   const { lat, lng } = req.body;
   if (lat && lng) {
     userLocation = { lat, lng };
     console.log("Updated user location:", userLocation);
-
-    // Adjust horse coordinates around new user location
-    horses = horses.map((h) => ({
-      ...h,
-      coordinates: {
-        lat: userLocation.lat + (Math.random() - 0.5) * 0.01,
-        lng: userLocation.lng + (Math.random() - 0.5) * 0.01
-      }
-    }));
-
     res.json({ success: true, userLocation });
   } else {
     res.status(400).json({ success: false, message: "Invalid location" });
   }
 });
 
-// Auto-update health metrics every 3 seconds
-setInterval(() => {
-  horses = horses.map(horse => {
-    horse.heartRate = 60 + Math.floor(Math.random() * 25); // realistic BPM
-    horse.temperature = Number((37 + Math.random() * 2).toFixed(1)); // °C
-    horse.speed = Number((Math.random() * 6).toFixed(1)); // km/h
-
-    // Small random walk around current position
-    horse.coordinates.lat += (Math.random() - 0.5) * 0.001;
-    horse.coordinates.lng += (Math.random() - 0.5) * 0.001;
-
-    horse.lastUpdated = new Date().toISOString();
-    horse.status = horse.heartRate > 80 ? "elevated" : "normal";
-
-    return horse;
-  });
-}, 3000);
-
 // Fetch horses
 app.get('/api/horses', (req, res) => {
   res.json({ success: true, horses });
 });
 
-// Fetch unassigned devices
+// Unassigned devices
 app.get("/api/unassigned", (req, res) => {
   res.json({
     success: true,
