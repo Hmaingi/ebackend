@@ -5,6 +5,9 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// Store user's location
+let userLocation = { lat: -0.4235, lng: 36.9485 }; // default
+
 let horses = [
   {
     horseId: "horse002",
@@ -36,14 +39,27 @@ let horses = [
   }
 ];
 
-// Auto-update values every 3s
+// Endpoint to update user location
+app.post('/api/location', (req, res) => {
+  const { lat, lng } = req.body;
+  if (lat && lng) {
+    userLocation = { lat, lng };
+    console.log("Updated user location:", userLocation);
+    res.json({ success: true, userLocation });
+  } else {
+    res.status(400).json({ success: false, message: "Invalid location" });
+  }
+});
+
+// Auto-update horse metrics and generate positions around user location
 setInterval(() => {
   horses = horses.map(horse => {
     horse.heartRate = 60 + Math.floor(Math.random() * 25);
     horse.temperature = (37 + Math.random() * 2).toFixed(1);
     horse.speed = (Math.random() * 6).toFixed(1);
-    horse.coordinates.lat += (Math.random() - 0.5) * 0.001;
-    horse.coordinates.lng += (Math.random() - 0.5) * 0.001;
+    // Generate positions around user's location ±0.0015 degrees
+    horse.coordinates.lat = userLocation.lat + (Math.random() - 0.5) * 0.003;
+    horse.coordinates.lng = userLocation.lng + (Math.random() - 0.5) * 0.003;
     horse.lastUpdated = new Date().toISOString();
     horse.status = horse.heartRate > 80 ? "elevated" : "normal";
     return horse;
@@ -54,7 +70,6 @@ setInterval(() => {
 app.get('/api/horses', (req, res) => {
   res.json({ success: true, horses });
 });
-
 
 // Endpoint for unassigned devices
 app.get("/api/unassigned", (req, res) => {
